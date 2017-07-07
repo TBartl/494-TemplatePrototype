@@ -8,7 +8,8 @@ public class GenerateMap : EditorWindow {
     TextAsset mapData;
     Texture spriteSheet;
     TextAsset tileTypes;
-    bool useRooms = false;
+    bool useRooms = true;
+    bool deleteEmptyRooms = true;
 
     static int roomWidth = 16;
     static int roomHeight = 11;
@@ -27,6 +28,9 @@ public class GenerateMap : EditorWindow {
         spriteSheet = (Texture)EditorGUILayout.ObjectField("SpriteSheet:", spriteSheet, typeof(Texture), false);
         tileTypes = (TextAsset)EditorGUILayout.ObjectField("Tile Types:", tileTypes, typeof(TextAsset), false);
         useRooms = EditorGUILayout.Toggle("Room Containers:", useRooms);
+        if (useRooms) {
+            deleteEmptyRooms = EditorGUILayout.Toggle("Delete Empty Rooms:", deleteEmptyRooms);
+        }
         if (GUILayout.Button("GO")) {
             GenerateAllTiles();
             this.Close();
@@ -95,14 +99,13 @@ public class GenerateMap : EditorWindow {
 
         // Rooms for organization (optional)
         Transform[,] rooms = null;
+        int numRoomsX = width / roomWidth;
+        int numRoomsY = height / roomHeight;
+        rooms = new Transform[numRoomsX, numRoomsY];
         if (useRooms) {
             GameObject room = new GameObject("Room");
             GameObject roomPrefab = PrefabUtility.CreatePrefab("Assets/" + prefabsFolderPath + "/Room.prefab", room);
-            DestroyImmediate(room);
-
-            int numRoomsX = width / roomWidth;
-            int numRoomsY = height / roomHeight;
-            rooms = new Transform[numRoomsX, numRoomsY];
+            DestroyImmediate(room);            
             for (int y = 0; y < numRoomsY; y++) {
                 for (int x = 0; x < numRoomsX; x++) {
                     GameObject roomGO = (GameObject)PrefabUtility.InstantiatePrefab(roomPrefab);
@@ -128,6 +131,15 @@ public class GenerateMap : EditorWindow {
                     tile.transform.parent = rooms[x / roomWidth, y / roomHeight];
                 }
                 tile.GetComponent<SpriteRenderer>().sprite = spriteArray[typeNum];
+            }
+        }
+
+        if (useRooms && deleteEmptyRooms) {
+            for (int y = 0; y < numRoomsY; y++) {
+                for (int x = 0; x < numRoomsX; x++) {
+                    if (rooms[x,y].childCount == 0)
+                        DestroyImmediate(rooms[x,y].gameObject);
+                }
             }
         }
     }
