@@ -8,6 +8,10 @@ public class GenerateMap : EditorWindow {
     TextAsset mapData;
     Texture spriteSheet;
     TextAsset tileTypes;
+    bool useRooms = false;
+
+    static int roomWidth = 16;
+    static int roomHeight = 11;
 
     static string prefabsFolderPath = "_GeneratedPrefabs";
 
@@ -22,6 +26,7 @@ public class GenerateMap : EditorWindow {
         mapData = (TextAsset)EditorGUILayout.ObjectField("Map Data:", mapData, typeof(TextAsset), false);
         spriteSheet = (Texture)EditorGUILayout.ObjectField("SpriteSheet:", spriteSheet, typeof(Texture), false);
         tileTypes = (TextAsset)EditorGUILayout.ObjectField("Tile Types:", tileTypes, typeof(TextAsset), false);
+        useRooms = EditorGUILayout.Toggle("Room Containers:", useRooms);
         if (GUILayout.Button("GO")) {
             GenerateAllTiles();
             this.Close();
@@ -85,7 +90,30 @@ public class GenerateMap : EditorWindow {
             }
         }
 
-        Transform root = new GameObject("Level").transform;
+        // A root GO to store all of the generated objects under
+        Transform root = new GameObject("Tiles").transform;
+
+        // Rooms for organization (optional)
+        Transform[,] rooms = null;
+        if (useRooms) {
+            GameObject room = new GameObject("Room");
+            GameObject roomPrefab = PrefabUtility.CreatePrefab("Assets/" + prefabsFolderPath + "/Room.prefab", room);
+            DestroyImmediate(room);
+
+            int numRoomsX = width / roomWidth;
+            int numRoomsY = height / roomHeight;
+            rooms = new Transform[numRoomsX, numRoomsY];
+            for (int y = 0; y < numRoomsY; y++) {
+                for (int x = 0; x < numRoomsX; x++) {
+                    GameObject roomGO = (GameObject)PrefabUtility.InstantiatePrefab(roomPrefab);
+                    roomGO.transform.position = new Vector2(x * roomWidth, y * roomHeight);
+                    roomGO.name = "Room (" + x + "," + y + ")";
+                    roomGO.transform.parent = root;
+                    rooms[x, y] = roomGO.transform;
+                }
+            }
+        }
+
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
                 int typeNum = map[x, y];
@@ -96,6 +124,9 @@ public class GenerateMap : EditorWindow {
                 GameObject tile = (GameObject)PrefabUtility.InstantiatePrefab(prefabDict[type]);
                 tile.transform.position = new Vector3(x, y);
                 tile.transform.parent = root;
+                if (useRooms) {
+                    tile.transform.parent = rooms[x / roomWidth, y / roomHeight];
+                }
                 tile.GetComponent<SpriteRenderer>().sprite = spriteArray[typeNum];
             }
         }
