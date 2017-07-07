@@ -180,7 +180,6 @@ public class ParseZeldaMap : MonoBehaviour {
         }
     }
     
-    
     void SaveTextureToFile( Texture2D tex, string fileName) {
         byte[] bytes = tex.EncodeToJPG(100);
         File.WriteAllBytes(Application.dataPath + "/"+fileName, bytes);
