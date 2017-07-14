@@ -6,6 +6,6 @@ public class LogFPS : MonoBehaviour {
     
 	// Update is called once per frame
 	void Update () {
-        Debug.Log(Time.timeScale / Time.deltaTime);		
+        //Debug.Log(Time.timeScale / Time.deltaTime);		
 	}
 }
