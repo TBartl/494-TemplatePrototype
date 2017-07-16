@@ -16,7 +16,7 @@ public class GenerateMap : EditorWindow {
 
     static string prefabsFolderPath = "_GeneratedPrefabs";
 
-    [MenuItem("494/Generate Map")]
+    [MenuItem("494/2) Generate Map", false, 1)]
     public static void Generate() {
         EditorWindow.GetWindow(typeof(GenerateMap));
     }
