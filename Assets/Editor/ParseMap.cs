@@ -161,6 +161,7 @@ public class ParseMap : EditorWindow
         ti.spriteImportMode = SpriteImportMode.Multiple;
         ti.spritesheet = newSpriteMetaData.ToArray();
         ti.textureCompression = TextureImporterCompression.Uncompressed;
+        ti.filterMode = FilterMode.Point;
         AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
 
         AssetDatabase.Refresh();
