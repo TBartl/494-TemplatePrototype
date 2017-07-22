@@ -33,21 +33,16 @@ using UnityEditor;
 
 public class ParseMap : EditorWindow
 {
-    /* Inspector Tunables */
     public Texture2D inputMap;
-    Texture2D outputSprites;
-    int tile_dimensions = 16; // Tiles are always squares.
-    int outputSpritesTextureSize = 256;
-    int numSprites = 0;
-    List<ulong> checkSums;
 
-    /* Private Data */
-    private int mapW;
-    private Color32[] mapData, newData;
-    private string[] indices;
+    int tileDimensions = 16; // Tiles are always squares.
+    int outputSpritesTextureSize = 256;
+
+    string textureName = "tileSpriteSheet.png";
+    string textName = "mapAsTileIndexes.txt";
 
     [MenuItem("494/1) Parse Map", false, 0)]
-    public static void Generate()
+    public static void Open()
     {
         EditorWindow.GetWindow(typeof(ParseMap));
     }
@@ -55,9 +50,8 @@ public class ParseMap : EditorWindow
     void OnGUI()
     {
         GUILayout.Label("Parse map into output spritesheet and text file", EditorStyles.boldLabel);
-        GUILayout.Label("", EditorStyles.boldLabel);
         inputMap = (Texture2D)EditorGUILayout.ObjectField("Input Map:", inputMap, typeof(Texture2D), false);
-        if (GUILayout.Button("Generate!"))
+        if (GUILayout.Button("Run Script!"))
         {
             Parse();
             this.Close();
@@ -67,95 +61,127 @@ public class ParseMap : EditorWindow
     // Update is called once per frame
     public void Parse()
     {
+        if (File.Exists(Application.dataPath + "/" + textureName))
+        {
+            Debug.LogError("Texture already generated! Delete or rename " + textureName + " to run the script!");
+            return;
+        }
+        if (File.Exists(Application.dataPath + "/" + textName))
+        {
+            Debug.LogError("Text file already generated! Delete or rename " + textName + " to run the script!");
+            return;
+        }
+
         // Pull in the original Metroid map
-        mapW = inputMap.width;
-        int w = inputMap.width / tile_dimensions;
-        int h = inputMap.height / tile_dimensions;
-
-        indices = new string[w * h];
-
-        mapData = inputMap.GetPixels32(0); // This will take a long time and a LOT of memory!
+        Color32[] mapData = inputMap.GetPixels32(0); // This will take a long time and a LOT of memory!
 
         // Create a new texture to hold the individual sprites
-        newData = new Color32[outputSpritesTextureSize * outputSpritesTextureSize];
-        outputSprites = new Texture2D(outputSpritesTextureSize, outputSpritesTextureSize, TextureFormat.RGBA32, false);
+        Color32[] newData = new Color32[outputSpritesTextureSize * outputSpritesTextureSize];
+        Texture2D outputSprites = new Texture2D(outputSpritesTextureSize, outputSpritesTextureSize, TextureFormat.RGBA32, false);
+
+        int mapTilesX = inputMap.width / tileDimensions;
+        int mapTilesY = inputMap.height / tileDimensions;
+        string[,] indices = new string[mapTilesX, mapTilesY];
+
+
+
 
         // Create a list of checkSums for the individual sprites
-        checkSums = new List<ulong>();
+        // CheckSums are used to distinguish two tiles from each other
+        List<ulong> checkSums = new List<ulong>();
 
-        ulong cs;
-        int found = -1;
-        int ndx;
+
         // Parse it one 16x16-pixel section at-a-time
-        for (int j = 0; j < h; j++)
+        for (int y = 0; y < mapTilesY; y++)
         {
-            for (int i = 0; i < w; i++)
+            for (int x = 0; x < mapTilesX; x++)
             {
+                Color32[] chunk = GetChunk(x, y, mapData);
 
-
-                Color32[] chunk = GetChunk(i, j);
                 // Convert this section to a checkSum
-                cs = CheckSum(chunk);
+                ulong checkSum = CheckSum(chunk);
 
                 // Check to see whether the current checkSum matches an already-found one
-                found = -1;
-                for (int k = 0; k < checkSums.Count; k++)
-                {
-                    if (cs == checkSums[k])
-                    {
-                        found = k;
-                        break;
-                    }
-                }
+                int checkSumIndex = checkSums.IndexOf(checkSum);
+
                 // If it doesn't, make a new checkSum and a new entry in the outputSprites Texture2D.
-                if (found == -1)
+                if (checkSumIndex == -1)
                 {
-                    checkSums.Add(cs);
-                    OutputChunk(chunk);
-                    found = numSprites;
-                    numSprites++;
+                    checkSums.Add(checkSum);
+                    checkSumIndex = checkSums.Count - 1;
+
+
+                    OutputChunk(chunk, newData, checkSumIndex);
                 }
-                ndx = i + j * w;
-                indices[ndx] = found.ToString("D3");
+                indices[x, y] = checkSumIndex.ToString("D3");
             }
-            Debug.Log("j=" + j + "\tSprites found:" + numSprites);
         }
 
-        // Generate the Texture2D from the newData
+        // Generate and output the text file 
+        string outputText = "";
+        for (int y = 0; y < mapTilesY; y++)
+        {
+            for (int x = 0; x < mapTilesX; x++)
+            {
+                outputText += indices[x, y] + ' ';
+            }
+            outputText += '\n';
+        }
+
+        File.WriteAllText(Application.dataPath + "/" + textName, outputText);
+
+        // Generate and output the Texture2D from the newData
         outputSprites.SetPixels32(newData, 0);
         outputSprites.Apply(true);
+        SaveTextureToFile(outputSprites, textureName);
 
-        SaveTextureToFile(outputSprites, "spriteMap.jpg");
-
-        // Output the text file 
-        string[] ind2 = new string[h];
-        string[] indTemp = new string[w];
-        for (int i = 0; i < h; i++)
+        // Update sprite sheet of texture
+        int numTiles = checkSums.Count;
+        int tileCountPerSide = outputSpritesTextureSize / tileDimensions;
+        List<SpriteMetaData> newSpriteMetaData = new List<SpriteMetaData>();
+        for (int i = 0; i < numTiles; i++)
         {
-            System.Array.Copy(indices, i * w, indTemp, 0, w);
-            ind2[i] = string.Join(" ", indTemp);
+            int x = i % tileCountPerSide;
+            int y = i / tileCountPerSide;
+            SpriteMetaData smd = new SpriteMetaData();
+            smd.pivot = new Vector2(0.5f, 0.5f);
+            smd.alignment = 9;
+            smd.name = "t_" + i.ToString("D3");
+            smd.rect = new Rect(x * tileDimensions, (tileCountPerSide - y - 1) * tileDimensions, tileDimensions, tileDimensions);
+            newSpriteMetaData.Add(smd);
         }
-        string str = string.Join("\n", ind2);
+        AssetDatabase.Refresh();
 
-        File.WriteAllText(Application.dataPath + "/" + "spriteText.txt", str);
-        Debug.Log(str);
+        Texture2D outputTexture = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/" + textureName);
+        string path = AssetDatabase.GetAssetPath(outputTexture);
+        TextureImporter ti = (TextureImporter)AssetImporter.GetAtPath(path);
+        ti.isReadable = true;
+        ti.spritePixelsPerUnit = 16;
+        ti.textureType = TextureImporterType.Sprite;
+        ti.spriteImportMode = SpriteImportMode.Multiple;
+        ti.spritesheet = newSpriteMetaData.ToArray();
+        ti.textureCompression = TextureImporterCompression.Uncompressed;
+        AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+
+        AssetDatabase.Refresh();
+
     }
 
 
-    public Color32[] GetChunk(int x, int y)
+    public Color32[] GetChunk(int x, int y, Color32[] mapData)
     {
-        Color32[] res = new Color32[tile_dimensions * tile_dimensions];
-        x *= tile_dimensions;
-        y *= tile_dimensions;
+        Color32[] res = new Color32[tileDimensions * tileDimensions];
+        x *= tileDimensions;
+        y *= tileDimensions;
         int ndx;
-        for (int j = 0; j < tile_dimensions; j++)
+        for (int j = 0; j < tileDimensions; j++)
         {
-            for (int i = 0; i < tile_dimensions; i++)
+            for (int i = 0; i < tileDimensions; i++)
             {
-                ndx = x + i + (y + j) * mapW;
+                ndx = x + i + (y + j) * inputMap.width;
                 try
                 {
-                    res[i + j * tile_dimensions] = mapData[ndx];
+                    res[i + j * tileDimensions] = mapData[ndx];
                 }
                 catch (System.IndexOutOfRangeException)
                 {
@@ -176,30 +202,30 @@ public class ParseMap : EditorWindow
         return res;
     }
 
-    void OutputChunk(Color32[] chunk)
+    void OutputChunk(Color32[] chunk, Color32[] toData, int spriteIndex)
     {
-        int spl = outputSpritesTextureSize / tile_dimensions;
-        int x = numSprites % spl;
-        int y = numSprites / spl;
+        int spl = outputSpritesTextureSize / tileDimensions;
+        int x = spriteIndex % spl;
+        int y = spriteIndex / spl;
         y = spl - y - 1;
-        x *= tile_dimensions;
-        y *= tile_dimensions;
+        x *= tileDimensions;
+        y *= tileDimensions;
 
         int ndxND, ndxC;
-        for (int i = 0; i < tile_dimensions; i++)
+        for (int i = 0; i < tileDimensions; i++)
         {
-            for (int j = 0; j < tile_dimensions; j++)
+            for (int j = 0; j < tileDimensions; j++)
             {
                 ndxND = x + i + (y + j) * outputSpritesTextureSize;
-                ndxC = i + j * tile_dimensions;
+                ndxC = i + j * tileDimensions;
 
                 try
                 {
-                    newData[ndxND] = chunk[ndxC];
+                    toData[ndxND] = chunk[ndxC];
                 }
                 catch (System.IndexOutOfRangeException)
                 {
-                    Debug.Log("OutputChunk() Index out of range:" + ndxND + "\tLengthND:" + newData.Length + "\tndxC=" + ndxC + "\tLengthC" + chunk.Length + "\ti=" + i + "\tj=" + j);
+                    Debug.Log("OutputChunk() Index out of range:" + ndxND + "\tLengthND:" + toData.Length + "\tndxC=" + ndxC + "\tLengthC" + chunk.Length + "\ti=" + i + "\tj=" + j);
                 }
             }
         }
