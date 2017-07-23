@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEditor;
+using System.IO;
 
 [System.Serializable]
 enum TemplateGame
@@ -10,22 +11,25 @@ enum TemplateGame
     zelda, metroid
 }
 
-public class GenerateMap : EditorWindow
+public class ParseAndGenerateMap : EditorWindow
 {
+    // Parse
+    public Texture2D inputMap;
+    int tileDimensions = 16; // Tiles are always squares.
+    int outputSpritesTextureSize = 256;
+    string textureName = "TileSpriteSheet.png";
 
-    TextAsset mapAsTileIndexes;
-    Texture spriteSheet;
+    // Generate
     TextAsset tileTypes;
     TemplateGame templateGame = TemplateGame.zelda;
     TextAsset metroidRooms;
-
     int roomWidth = 16;
     int roomHeight = 11; // 15 for metroid
 
-    [MenuItem("494/2) Generate Map", false, 1)]
+    [MenuItem("494/1) Parse and Generate Map", false, 0)]
     public static void Generate()
     {
-        EditorWindow.GetWindow(typeof(GenerateMap));
+        EditorWindow.GetWindow(typeof(ParseAndGenerateMap));
     }
 
     void OnGUI()
@@ -47,8 +51,7 @@ public class GenerateMap : EditorWindow
         {
             GUILayout.Label("Generate Map Into Current Scene", EditorStyles.boldLabel);
             GUILayout.Label("", EditorStyles.boldLabel);
-            mapAsTileIndexes = (TextAsset)EditorGUILayout.ObjectField("Map as Tile Indexes:", mapAsTileIndexes, typeof(TextAsset), false);
-            spriteSheet = (Texture)EditorGUILayout.ObjectField("Tile Sprite Sheet:", spriteSheet, typeof(Texture), false);
+            inputMap = (Texture2D)EditorGUILayout.ObjectField("Input Map Texture:", inputMap, typeof(Texture2D), false);
             tileTypes = (TextAsset)EditorGUILayout.ObjectField("Tile Prefabs by Tile Index:", tileTypes, typeof(TextAsset), false);
             templateGame = (TemplateGame)EditorGUILayout.EnumPopup("Game:", templateGame);
             if (templateGame == TemplateGame.metroid)
@@ -56,13 +59,9 @@ public class GenerateMap : EditorWindow
                 metroidRooms = (TextAsset)EditorGUILayout.ObjectField("Room Grouping:", metroidRooms, typeof(TextAsset), false);
             }
 
-            if (mapAsTileIndexes == null)
+            if (inputMap == null)
             {
-                GUILayout.Label("Map data not provided!\nAdd map data to continue.", EditorStyles.boldLabel);
-            }
-            else if (spriteSheet == null)
-            {
-                GUILayout.Label("Sprite Sheet not provided!\nAdd a sprite sheet to continue.", EditorStyles.boldLabel);
+                GUILayout.Label("Input map texture not provided!\nAdd an input map to run the script!", EditorStyles.boldLabel);
             }
             else if (tileTypes == null)
             {
@@ -74,13 +73,173 @@ public class GenerateMap : EditorWindow
             }
             else if (GUILayout.Button("Generate!"))
             {
-                GenerateAllTiles();
+                Texture2D newSpriteSheet;
+                int[,] mapAsTileIndices;
+                Parse(out newSpriteSheet, out mapAsTileIndices);
+
+                Generate(newSpriteSheet, mapAsTileIndices);
+
+                Debug.Log("Script finished successfully");
                 this.Close();
             }
         }
     }
 
-    void GenerateAllTiles()
+    public void Parse(out Texture2D newSpriteSheet, out int[,] mapAsTileIndices)
+    {
+        // Pull in the original Metroid map
+        Color32[] mapData = inputMap.GetPixels32(0); // This will take a long time and a LOT of memory!
+
+        // Create a new texture to hold the individual sprites
+        Color32[] newData = new Color32[outputSpritesTextureSize * outputSpritesTextureSize];
+        Texture2D outputSprites = new Texture2D(outputSpritesTextureSize, outputSpritesTextureSize, TextureFormat.RGBA32, false);
+
+        int mapTilesX = inputMap.width / tileDimensions;
+        int mapTilesY = inputMap.height / tileDimensions;
+        int[,] indices = new int[mapTilesX, mapTilesY];
+
+        // Create a list of checkSums for the individual sprites
+        // CheckSums are used to distinguish two tiles from each other
+        List<ulong> checkSums = new List<ulong>();
+
+        // Parse it one 16x16-pixel section at-a-time
+        for (int y = 0; y < mapTilesY; y++)
+        {
+            for (int x = 0; x < mapTilesX; x++)
+            {
+                Color32[] chunk = GetChunk(x, y, mapData);
+
+                // Convert this section to a checkSum
+                ulong checkSum = CheckSum(chunk);
+
+                // Check to see whether the current checkSum matches an already-found one
+                int checkSumIndex = checkSums.IndexOf(checkSum);
+
+                // If it doesn't, make a new checkSum and a new entry in the outputSprites Texture2D.
+                if (checkSumIndex == -1)
+                {
+                    checkSums.Add(checkSum);
+                    checkSumIndex = checkSums.Count - 1;
+
+
+                    OutputChunk(chunk, newData, checkSumIndex);
+                }
+                indices[x, y] = checkSumIndex;
+            }
+        }
+
+        mapAsTileIndices = indices;
+
+        // Generate and output the Texture2D from the newData
+        outputSprites.SetPixels32(newData, 0);
+        outputSprites.Apply(true);
+        SaveTextureToFile(outputSprites, textureName);
+
+        // Update sprite sheet of texture
+        int numTiles = checkSums.Count;
+        int tileCountPerSide = outputSpritesTextureSize / tileDimensions;
+        List<SpriteMetaData> newSpriteMetaData = new List<SpriteMetaData>();
+        for (int i = 0; i < numTiles; i++)
+        {
+            int x = i % tileCountPerSide;
+            int y = i / tileCountPerSide;
+            SpriteMetaData smd = new SpriteMetaData();
+            smd.pivot = new Vector2(0.5f, 0.5f);
+            smd.alignment = 9;
+            smd.name = EditorUtilityFunctions.spriteSheetIDPrefix + i.ToString("D3");
+            smd.rect = new Rect(x * tileDimensions, (tileCountPerSide - y - 1) * tileDimensions, tileDimensions, tileDimensions);
+            newSpriteMetaData.Add(smd);
+        }
+        AssetDatabase.Refresh();
+
+        Texture2D outputTexture = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/" + textureName);
+        string path = AssetDatabase.GetAssetPath(outputTexture);
+        TextureImporter ti = (TextureImporter)AssetImporter.GetAtPath(path);
+        ti.isReadable = true;
+        ti.spritePixelsPerUnit = 16;
+        ti.textureType = TextureImporterType.Sprite;
+        ti.spriteImportMode = SpriteImportMode.Multiple;
+        ti.spritesheet = newSpriteMetaData.ToArray();
+        ti.textureCompression = TextureImporterCompression.Uncompressed;
+        ti.filterMode = FilterMode.Point;
+        AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+
+        newSpriteSheet = outputTexture;
+
+        AssetDatabase.Refresh();
+
+    }
+
+    public Color32[] GetChunk(int x, int y, Color32[] mapData)
+    {
+        Color32[] res = new Color32[tileDimensions * tileDimensions];
+        x *= tileDimensions;
+        y *= tileDimensions;
+        int ndx;
+        for (int j = 0; j < tileDimensions; j++)
+        {
+            for (int i = 0; i < tileDimensions; i++)
+            {
+                ndx = x + i + (y + j) * inputMap.width;
+                try
+                {
+                    res[i + j * tileDimensions] = mapData[ndx];
+                }
+                catch (System.IndexOutOfRangeException)
+                {
+                    Debug.Log("GetChunk() Index out of range:" + ndx + "\tLength:" + mapData.Length + "\ti=" + i + "\tj=" + j);
+                }
+            }
+        }
+        return res;
+    }
+
+    public ulong CheckSum(Color32[] chunk)
+    {
+        ulong res = 0;
+
+        for (int i = 0; i < chunk.Length; i++)
+            res += (ulong)(chunk[i].r * (i + 1) + chunk[i].g * (i + 2) + chunk[i].b * (i + 3));
+
+        return res;
+    }
+
+    void OutputChunk(Color32[] chunk, Color32[] toData, int spriteIndex)
+    {
+        int spl = outputSpritesTextureSize / tileDimensions;
+        int x = spriteIndex % spl;
+        int y = spriteIndex / spl;
+        y = spl - y - 1;
+        x *= tileDimensions;
+        y *= tileDimensions;
+
+        int ndxND, ndxC;
+        for (int i = 0; i < tileDimensions; i++)
+        {
+            for (int j = 0; j < tileDimensions; j++)
+            {
+                ndxND = x + i + (y + j) * outputSpritesTextureSize;
+                ndxC = i + j * tileDimensions;
+
+                try
+                {
+                    toData[ndxND] = chunk[ndxC];
+                }
+                catch (System.IndexOutOfRangeException)
+                {
+                    Debug.Log("OutputChunk() Index out of range:" + ndxND + "\tLengthND:" + toData.Length + "\tndxC=" + ndxC + "\tLengthC" + chunk.Length + "\ti=" + i + "\tj=" + j);
+                }
+            }
+        }
+    }
+
+    void SaveTextureToFile(Texture2D tex, string fileName)
+    {
+        byte[] bytes = tex.EncodeToJPG(100);
+        File.WriteAllBytes(Application.dataPath + "/" + fileName, bytes);
+    }
+
+    void Generate(Texture2D spriteSheet, int[,] mapAsTileIndices)
     {
         // Game specific setup
         if (templateGame == TemplateGame.zelda)
@@ -107,21 +266,8 @@ public class GenerateMap : EditorWindow
         }
 
         // Read in the map data
-        string[] mapLines = mapAsTileIndexes.text.Split(new char[] { '\n' }, System.StringSplitOptions.RemoveEmptyEntries);
-        int height = mapLines.Length;
-        string[] tileNums = mapLines[0].Split(new char[] { ' ' }, System.StringSplitOptions.RemoveEmptyEntries);
-        int width = tileNums.Length;
-
-        // Place the map data into a 2D Array to make it faster to access
-        int[,] map = new int[width, height];
-        for (int y = 0; y < height; y++)
-        {
-            tileNums = mapLines[y].Split(new char[] { ' ' }, System.StringSplitOptions.RemoveEmptyEntries);
-            for (int x = 0; x < width; x++)
-            {
-                map[x, y] = int.Parse(tileNums[x]);
-            }
-        }
+        int height = mapAsTileIndices.GetLength(1);
+        int width = mapAsTileIndices.GetLength(0);
 
         // Root parent to store rooms and tiles
         Transform root = new GameObject("Level").transform;
@@ -143,9 +289,7 @@ public class GenerateMap : EditorWindow
         {
             hallsMatrix = metroidRooms.text.Split(new char[] { '\n' }, System.StringSplitOptions.RemoveEmptyEntries);
         }
-
-
-
+        
         // Now generate all of the rooms
         for (int y = 0; y < numRoomsY; y++)
         {
@@ -187,7 +331,7 @@ public class GenerateMap : EditorWindow
         {
             for (int x = 0; x < width; x++)
             {
-                int typeNum = map[x, y];
+                int typeNum = mapAsTileIndices[x, y];
                 string type = prefabArray[typeNum];
                 if (type == "NULL")
                     continue;

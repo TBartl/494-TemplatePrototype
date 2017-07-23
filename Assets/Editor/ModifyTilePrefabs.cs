@@ -13,7 +13,7 @@ public class ModifyTilePrefabs : EditorWindow
     List<string> prefabTypesNeeded;
     Dictionary<string, List<GameObject>> changesToBeMade;
 
-    [MenuItem("494/3) Modify Tile Prefabs", false, 2)]
+    [MenuItem("494/2) Modify Tile Prefabs", false, 2)]
     public static void Generate()
     {
         EditorWindow.GetWindow(typeof(ModifyTilePrefabs));
