@@ -6,6 +6,7 @@ using UnityEditor;
 public class EditorUtilityFunctions  {
 
     public static string tilePrefix = "Tile_";
+    public static string spriteSheetIDPrefix = "t_";
 
     public static GameObject GetRoomPrefab()
     {

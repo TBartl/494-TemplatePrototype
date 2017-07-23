@@ -151,7 +151,7 @@ public class ParseMap : EditorWindow
                 SpriteMetaData smd = new SpriteMetaData();
                 smd.pivot = new Vector2(0.5f, 0.5f);
                 smd.alignment = 9;
-                smd.name = "t_" + i.ToString("D3");
+                smd.name = EditorUtilityFunctions.spriteSheetIDPrefix + i.ToString("D3");
                 smd.rect = new Rect(x * tileDimensions, (tileCountPerSide - y - 1) * tileDimensions, tileDimensions, tileDimensions);
                 newSpriteMetaData.Add(smd);
             }
