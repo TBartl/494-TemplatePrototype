@@ -20,7 +20,6 @@ public class ParseAndGenerateMap : EditorWindow
     string textureName = "TileSpriteSheet.png";
 
     // Generate
-    TextAsset tileTypes;
     TemplateGame templateGame = TemplateGame.zelda;
     TextAsset metroidRooms;
     int roomWidth = 16;
@@ -52,7 +51,6 @@ public class ParseAndGenerateMap : EditorWindow
             GUILayout.Label("Generate Map Into Current Scene", EditorStyles.boldLabel);
             GUILayout.Label("", EditorStyles.boldLabel);
             inputMap = (Texture2D)EditorGUILayout.ObjectField("Input Map Texture:", inputMap, typeof(Texture2D), false);
-            tileTypes = (TextAsset)EditorGUILayout.ObjectField("Tile Prefabs by Tile Index:", tileTypes, typeof(TextAsset), false);
             templateGame = (TemplateGame)EditorGUILayout.EnumPopup("Game:", templateGame);
             if (templateGame == TemplateGame.metroid)
             {
@@ -62,10 +60,6 @@ public class ParseAndGenerateMap : EditorWindow
             if (inputMap == null)
             {
                 GUILayout.Label("Input map texture not provided!\nAdd an input map to run the script!", EditorStyles.boldLabel);
-            }
-            else if (tileTypes == null)
-            {
-                GUILayout.Label("Tile Prefab data not provided!\nAdd Tile prefab file to continue..", EditorStyles.boldLabel);
             }
             else if (templateGame == TemplateGame.metroid && metroidRooms == null)
             {
@@ -249,21 +243,7 @@ public class ParseAndGenerateMap : EditorWindow
 
         // Load Sprites
         var spriteSheetPath = AssetDatabase.GetAssetPath(spriteSheet);
-        Sprite[] spriteArray = AssetDatabase.LoadAllAssetsAtPath(spriteSheetPath).OfType<Sprite>().ToArray();
-
-        // Generate new tile prefabs
-        string[] prefabArray = tileTypes.text.Split(new char[] { ' ', '\n' }, System.StringSplitOptions.RemoveEmptyEntries);
-        Dictionary<string, GameObject> prefabDict = new Dictionary<string, GameObject>();
-        for (int i = 0; i < prefabArray.Length; i++)
-        {
-            string thisPrefabType = prefabArray[i];
-            if (thisPrefabType == "NULL") // Don't generate NULL GameObject
-                continue;
-            if (prefabDict.ContainsKey(thisPrefabType)) // Only need to generate one prefab, will skip most tile numbers
-                continue;
-            GameObject newPrefab = EditorUtilityFunctions.GenerateNewTilePrefab(thisPrefabType, spriteArray[i]);
-            prefabDict.Add(thisPrefabType, newPrefab);
-        }
+        Sprite[] spriteArray = AssetDatabase.LoadAllAssetsAtPath(spriteSheetPath).OfType<Sprite>().ToArray();        
 
         // Read in the map data
         int height = mapAsTileIndices.GetLength(1);
@@ -326,17 +306,19 @@ public class ParseAndGenerateMap : EditorWindow
             }
         }
 
+        // Create a new tile prefab
+        GameObject tilePrefab = EditorUtilityFunctions.GenerateNewTilePrefab("NONE");
+
         // Place tiles on the map
         for (int y = 0; y < height; y++)
         {
             for (int x = 0; x < width; x++)
             {
                 int typeNum = mapAsTileIndices[x, y];
-                string type = prefabArray[typeNum];
-                if (type == "NULL")
-                    continue;
+                if (typeNum == 0)
+                    continue; // Skip past empty black tile
 
-                GameObject tile = (GameObject)PrefabUtility.InstantiatePrefab(prefabDict[type]);
+                GameObject tile = (GameObject)PrefabUtility.InstantiatePrefab(tilePrefab);
                 tile.transform.position = new Vector3(x, y);
                 tile.transform.parent = rooms[x / roomWidth, y / roomHeight];
                 tile.GetComponent<SpriteRenderer>().sprite = spriteArray[typeNum];
