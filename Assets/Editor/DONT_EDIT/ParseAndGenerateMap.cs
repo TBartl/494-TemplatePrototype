@@ -127,7 +127,7 @@ public class ParseAndGenerateMap : EditorWindow
         // Generate and output the Texture2D from the newData
         outputSprites.SetPixels32(newData, 0);
         outputSprites.Apply(true);
-        SaveTextureToFile(outputSprites, textureName);
+        string texturePath = SaveTextureToFile(outputSprites, textureName);
 
         // Update sprite sheet of texture
         int numTiles = checkSums.Count;
@@ -146,7 +146,7 @@ public class ParseAndGenerateMap : EditorWindow
         }
         AssetDatabase.Refresh();
 
-        Texture2D outputTexture = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/" + textureName);
+        Texture2D outputTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
         string path = AssetDatabase.GetAssetPath(outputTexture);
         TextureImporter ti = (TextureImporter)AssetImporter.GetAtPath(path);
         ti.isReadable = true;
@@ -227,10 +227,13 @@ public class ParseAndGenerateMap : EditorWindow
         }
     }
 
-    void SaveTextureToFile(Texture2D tex, string fileName)
+    string SaveTextureToFile(Texture2D tex, string fileName)
     {
         byte[] bytes = tex.EncodeToJPG(100);
-        File.WriteAllBytes(Application.dataPath + "/" + fileName, bytes);
+        string folder = EditorUtilityFunctions.GetGeneratedAssetsFolder();
+        string path = folder + fileName;
+        File.WriteAllBytes(path, bytes);
+        return path;
     }
 
     void Generate(Texture2D spriteSheet, int[,] mapAsTileIndices)
@@ -257,7 +260,7 @@ public class ParseAndGenerateMap : EditorWindow
         int numRoomsX = width / roomWidth;
         int numRoomsY = height / roomHeight;
         rooms = new Transform[numRoomsX, numRoomsY];
-        string roomPrefabPath = "Assets/Room.prefab";
+        string roomPrefabPath = EditorUtilityFunctions.GetGeneratedAssetsFolder() + "Room.prefab";
         GameObject roomInstance = new GameObject("Room");
         GameObject roomPrefab = PrefabUtility.CreatePrefab(roomPrefabPath, roomInstance);
         DestroyImmediate(roomInstance);
