@@ -28,7 +28,7 @@ public class ParseAndGenerateMap : EditorWindow
     [MenuItem("494/1) Parse and Generate Map", false, 0)]
     public static void Generate()
     {
-        EditorWindow.GetWindow(typeof(ParseAndGenerateMap));
+        EditorWindow.GetWindowWithRect(typeof(ParseAndGenerateMap), new Rect(0, 0, 700, 400));
     }
 
     void OnGUI()
