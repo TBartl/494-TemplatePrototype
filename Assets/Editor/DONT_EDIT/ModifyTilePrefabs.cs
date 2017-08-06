@@ -65,7 +65,7 @@ public class ModifyTilePrefabs : EditorWindow {
                 GUILayout.Label("", EditorStyles.boldLabel);
 
                 if (willCreateNewPrefabs || willMakeChangesToTiles) {
-                    GUILayout.Label("This script works by deleteing these tiles and remaking them with another prefab.", EditorStyles.label);
+                    GUILayout.Label("This script works by deleting these tiles and remaking them with another prefab.", EditorStyles.label);
                     GUILayout.Label("This script has the potential to DELETE objects in your scene.", EditorStyles.label);
                     GUILayout.Label("Ensure you have committed recently!", EditorStyles.boldLabel);
                     GUILayout.Label("By pressing \"I Accept\" you are acknowledging you understand these potential risks.", EditorStyles.label);
