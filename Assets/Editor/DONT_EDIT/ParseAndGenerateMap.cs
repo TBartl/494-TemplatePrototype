@@ -36,11 +36,11 @@ public class ParseAndGenerateMap : EditorWindow
         // Check for errors
         if (EditorUtilityFunctions.GetRoomPrefab() != null)// If room prefab exists
         {
-            GUILayout.Label("Room prefab already exists!\nScript will not rerun in order to ensure this prefabs isn't overwritten.", EditorStyles.boldLabel);
+            GUILayout.Label("Room prefab already exists!\nScript will not rerun in order to ensure this prefab isn't overwritten. Delete the prefab if you want to regenerate the map.", EditorStyles.boldLabel);
         }
         else if (EditorUtilityFunctions.GetTilePrefabs().Count > 0)// If any Tiles exist
         {
-            GUILayout.Label("Tile prefabs already exist!\nScript will not rerun in order to ensure these prefabs aren't overwritten.", EditorStyles.boldLabel);
+            GUILayout.Label("Tile prefabs already exist!\nScript will not rerun in order to ensure these prefabs aren't overwritten. Delete the prefabs if you want to regenerate the map.", EditorStyles.boldLabel);
         }
         else if (GameObject.Find("Level") != null)
         {
@@ -73,7 +73,7 @@ public class ParseAndGenerateMap : EditorWindow
 
                 Generate(newSpriteSheet, mapAsTileIndices);
 
-                Debug.Log("Script finished successfully");
+                Debug.Log("Map Generation Successful! Check your hierarchy view and _GeneratedAssets folder for new content.");
                 this.Close();
             }
         }
@@ -229,7 +229,7 @@ public class ParseAndGenerateMap : EditorWindow
 
     string SaveTextureToFile(Texture2D tex, string fileName)
     {
-        byte[] bytes = tex.EncodeToJPG(100);
+        byte[] bytes = tex.EncodeToPNG();
         string folder = EditorUtilityFunctions.GetGeneratedAssetsFolder();
         string path = folder + fileName;
         File.WriteAllBytes(path, bytes);
